@@ -7,10 +7,8 @@ from pycoingecko import CoinGeckoAPI
 
 WEBSOCKET_URI = 'localhost'
 WEBSOCKET_PORT = 8765
-
-
+SLEEPER = 15 # We sleep for this many seconds to avoid being limited by the API
 cg_client = CoinGeckoAPI()
-
 # This maps names to symbols, need both to call the API & to send the response.
 crypto_dict = {
     "bitcoin": "BTC", "ethereum": "ETH", "litecoin": "LTC", "ripple": "XRP", "bitcoin-cash": "BCH", "usdc": "USDC", "monero": "XMR", "stellar": "XLM", "usdt": "USDT",
@@ -26,7 +24,7 @@ crypto_dict = {
 }
 # List of assets 
 assets = list(crypto_dict.keys())
-# list of clients at any given moment
+# list of clients at any given moment, represented as a set containing websockets.
 clients = set()
 subscription_message = {
     "event": "subscribe",
@@ -36,14 +34,16 @@ subscription_message = {
 initial_prices = {}
 
 # Call the CoinGecko API and get the prices for all assets
-def get_prices():
+def get_prices() -> dict:
+    'Calls the CoinGecko API and gets the asset prices in a dictionary'
     price_data = cg_client.get_price(ids=assets, vs_currencies='cad')
     return {key: price_data[key].get(
         'cad') for key in price_data}
 
 
-#Handles new clients and adds them to a list, removes them if connection closes.
-async def handle_client(websocket):
+
+async def accept_subscription(websocket: websockets) -> None:
+    'Accepts new subscriptions, and sends a welcome message. In case of connection closing, unsubscribes the client. '
     try:
         async for message in websocket:
             data = json.loads(message)
@@ -58,8 +58,9 @@ async def handle_client(websocket):
             print('Tried to remove a client that was already gone')
 
 
-# Do some funky math for the prices needed, not sure about these formulae but can be easily adjusted.
-def transform_price_data(coin, price):
+
+def transform_price_data(coin: str, price: float) -> dict:
+    'Do some funky math for the prices needed, not sure about these formulae but can be easily adjusted. Returns a dictionary type.'
     min_price = price * 0.5  # Assumed
     max_price = price * 1.5  # Asssumed
     spread = max_price - min_price  # This is what I got from some Googling
@@ -77,20 +78,23 @@ def transform_price_data(coin, price):
     }
 
 # Clean up any invalid clients
-def clean_up_clients(clients, invalid_clients):
+def clean_up_clients(clients: set, invalid_clients: set) -> None:
+    'Looks at invalid clients and removes them from our clients set, cleans up the set'
     for invalid_client in invalid_clients:
         clients.remove(invalid_client)
     invalid_clients.clear()
 
 
-async def broadcast():
-    print('Setting up Broadcast!!')
+async def publish() -> None:
+    'The entire publishing process. Call the helper functions above to process the data, then send them to the clients in our set. '
+    'In case of an ungraceful termination, cleans up the client list using the helper.'
+    print('Setting Up Broadcast!')
 
     # Keep track of any clients that we may have lost, remove them before we iterate through the list again
     invalid_clients = set()
 
     while True:
-        # Get the data e need
+        # Get the data we need from our helper
         prices = get_prices()
 
         for coin, price in prices.items():
@@ -108,15 +112,15 @@ async def broadcast():
                     invalid_clients.add(client)
             clean_up_clients(clients, invalid_clients)
 
-        print('Sent subscriber data')
-        await asyncio.sleep(15) #we add a sleep to avoid breaching the API rate limit
+        print('Sent data to subscriber!')
+        await asyncio.sleep(SLEEPER) #we add a sleep to avoid breaching the API rate limit
 
 
 async def main():
     print(
         f"Starting WebSocket server at ws://{WEBSOCKET_URI}:{WEBSOCKET_PORT}/markets/ws")
-    server = await websockets.serve(handle_client, WEBSOCKET_URI, WEBSOCKET_PORT)
-    await asyncio.gather(server.wait_closed(), broadcast())
+    server = await websockets.serve(accept_subscription, WEBSOCKET_URI, WEBSOCKET_PORT)
+    await asyncio.gather(server.wait_closed(), publish())
 
 
 if __name__ == '__main__':

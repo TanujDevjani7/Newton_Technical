@@ -12,6 +12,11 @@ The responses to clients take the form of a broadcast message sent out to all "s
 To run the program, type the following commands in a terminal:
 1. pip install -r requirements.txt
 2. python price_server.py
-3. python testing.py
-   
-   
+The program currently runs on port 8765, can be adjusted.
+
+To test the server, run the client file by typing:
+1. python testing.py
+Currently set to run on port 8765, can be adjusted in the uri at the top of the file. In either case, ensure to match port defined at top of server file. You should receive periodic asset updates.
+
+If you wish to support more assets for the program, you may modify the crypto_dict at the top of the server file, and add in a new key, value pair in the shape of {"asset":"asset_symbol"} e.g. {"bitcoin":"BTC"}.
+
