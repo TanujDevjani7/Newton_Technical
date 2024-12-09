@@ -68,14 +68,16 @@ def transform_price_data(coin: str, price: float) -> dict:
     bid = spot - spread//2  # Got this from Googling, also an assumption
     ask = spot + spread//2  # Got this from Googling, also an assumption
     change = round(((spot - price) / price) * 100, 2) # For our case, will always return 0. 
-    return {
+    return {"channel": "rates",
+            "event": "data",
+            "data":{
         'symbol': crypto_dict.get(coin, 'No coin symbol available'),
         'timestamp': int(time.time()),
         'bid': bid,
         'ask': ask,
         'spot': spot,
         'change': change
-    }
+    }}
 
 # Clean up any invalid clients
 def clean_up_clients(clients: set, invalid_clients: set) -> None:
